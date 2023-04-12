@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+
+##########################################################
+# increase volume-size per given input
+#
+# v1.0 VN 202109
+#
+# 1. inputs: env-name, volume-id and size
+# 2. identify current size
+# 3. increase by given size
+##########################################################
+
+###############################################
+
+function usage()
+{
+	echo -e "\nUSAGE: $0 -e env -v volid -p upsize_percent\n\nExample: $0 -e test -v vol-123456 -p 10"
+	exit 11
+}
+
+# --------------------------------------------------------------------------- #
+
+function time_exp()
+{
+    echo "$(date +'[%Y-%m-%d %H:%M:%S]')"
+}
+
+# --------------------------------------------------------------------------- #
+
+function msg()
+{
+    echo "$(time_exp) INFO: " $*
+}
+
+# --------------------------------------------------------------------------- #
+
+function err()
+{
+	echo "$(time_exp) ERROR: " $*
+	exit 22
+}
+
+# --------------------------------------------------------------------------- #
+
+###############################################
+
+#process input
+while getopts ":he::p:v::" opt; do
+  case ${opt} in
+    h)
+            usage
+      ;;
+    e)
+	    env=$OPTARG
+      ;;
+    v)
+	    volId=$OPTARG
+      ;;
+    p)
+            upsize_percent=$OPTARG
+      ;;
+    *)
+            echo "Incorrect syntax"
+            usage
+      ;;
+  esac
+done
+shift $((OPTIND -1))
+
+if [ -z $env ] || [ -z ${volId} ] || [ -z ${upsize_percent} ];then
+	usage
+fi
+
+case $env in
+  stg|staging)
+    ENV="staging"
+    AWSPROF="anzstg"
+    AWSREGION="ap-southeast-2" #Sydney
+  ;;
+  au|AU|anz|ANZ|prd|production)
+    AWSPROF="anzprod"
+    AWSREGION="ap-southeast-2" #Sydney
+  ;;
+  us|US)
+    AWSPROF="usprod"
+    AWSREGION="us-west-2" #Oregon
+  ;;
+  uk|UK)
+    AWSPROF="ukprod"
+    AWSREGION="eu-west-1" #Ireland
+  ;;
+  *)
+    err "Unsupported environment!"
+  ;;
+esac
+
+##############
+
+#identify current volume-size
+vol_size_gb=$(aws ec2 describe-volumes --volume-ids ${volId} --query "Volumes[*].{size:Size}" --profile=${AWSPROF} --output=text | tr -d ' ')
+
+#new volume size based on given upsize_percent
+newvolSizeGB=$((${vol_size_gb} + ((${vol_size_gb} * ${upsize_percent}) / 100)))
+
+if [ $vol_size_gb -eq $newvolSizeGB ];then
+	msg "${volId}: new-size ${newvolSizeGB} is same as current-size ${vol_size_gb}. Nothing to do"
+	exit 0
+fi
+
+msg "Let us upsize ${volId} from ${vol_size_gb} to ${newvolSizeGB}"
+
+vol_upsize_execute=$(aws ec2 modify-volume --volume-id ${volId} --size ${newvolSizeGB} --profile=${AWSPROF} --output=json)
+if [ $? == 0 ];then
+	msg "volume upsize succeeded"
+else
+	err "volume upsize failed"
+fi
+
+exit 0

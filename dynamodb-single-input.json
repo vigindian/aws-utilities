@@ -1,0 +1,4 @@
+{
+	"Name": {"S": "SampleEntry1"},
+        "AString": {"S": "SampleString1"}
+}

@@ -1,0 +1,150 @@
+#!/bin/bash
+
+#user input
+FILE=$1
+VALIDITY=$2
+
+#AWS stuff
+AWS_BUCKET="YOURBUCKETNAME"
+AWS_DEFAULT_REGION="YOURBUCKETREGION"
+DAY=`date +%Y-%m-%d`
+
+#Email notification
+# Source email address
+MAIL_FROM="noreply@example.com"
+# recipients should be all users in this $COMPANY with 'TECH' feature
+RECIPIENTS="devops@example.com"
+
+AWSBIN=$(which aws)
+
+#############
+# FUNCTIONS
+#############
+
+# --------------------------------------------------------------------------- #
+
+function Usage()
+{
+	echo -e "\nUSAGE: $0 filename validity_in_days\n"
+}
+
+# Copied from https://github.com/gdbtek/aws-tools
+function generateSignURL()
+{
+    local filePath="${1}"
+    local daysExpire=$VALIDITY
+
+    local expire="$(($(date +%s) + ${daysExpire} * 60 * 24 * 60))"
+    local signature="$(echo -en "GET\n\n\n${expire}\n/${filePath}" | \
+                       openssl dgst -sha1 -binary -hmac "$AWS_SECRET_ACCESS_KEY" | \
+                       openssl base64)"
+    local query="AWSAccessKeyId=$(encodeURL "$AWS_ACCESS_KEY_ID")&Expires=${expire}&Signature=$(encodeURL "${signature}")"
+
+    echo "http://s3-$AWS_DEFAULT_REGION.amazonaws.com/${filePath}?${query}"
+}
+
+# --------------------------------------------------------------------------- #
+
+function sendMail()
+{
+    if [[ ! -x /usr/sbin/sendmail ]]; then
+        echo -e "ERROR: no /usr/sbin/sendmail!"
+    fi
+
+    # Note that when sending emails, that the local postfix
+    # server is instrumented to prepend the environment to
+    # the subject line
+
+    local URL=$1
+    local REMOVAL_DATE=$(date -d 'today + 6 months' +'%Y-%m-%d')
+    local URL_DATE=$(date -d "+$VALIDITY days" +'%F %r %Z')
+    #/usr/sbin/sendmail -N never -f "$MAIL_FROM" -v "$RECIPIENTS" <<EOF
+    echo -e "From: ${MAIL_FROM}\nSubject: Signed URL for $FILENAME
+
+The file $FILENAME is available for download from the following location:
+
+$URL
+
+This URL is only valid for the next $VALIDITY days until $URL_DATE.  If it is not
+actioned within that time, please contact us for a new download link.
+
+This file will be automatically archived by $REMOVAL_DATE and must be downloaded
+by that time.
+
+Thanks.
+
+Sincerely,
+
+DevOps." | sendmail "$RECIPIENTS"
+
+}
+
+# --------------------------------------------------------------------------- #
+
+function encodeURL()
+{
+    local length="${#1}"
+
+    for ((i = 0; i < length; i++))
+    do
+        local walker="${1:i:1}"
+
+        case "${walker}" in
+            [a-zA-Z0-9.~_-])
+                printf "${walker}"
+                ;;
+            ' ')
+                printf +
+                ;;
+            *)
+                printf '%%%X' "'${walker}"
+                ;;
+        esac
+    done
+}
+
+##########
+# MAIN
+##########
+if [ \( -z "$FILE" \) -o \( -z "$VALIDITY" \) ] ;then
+        Usage
+        exit 2
+fi
+
+#if AWS credentials were defined externally to this script, use it. or else try to obtain from user's aws config
+if [ \( -z "$AWS_ACCESS_KEY_ID" \) -o \( -z "$AWS_SECRET_ACCESS_KEY" \) ] ;then
+#user home directory
+USRHOME=$(eval echo ~$USER)
+AWSSECUREFILE="${USRHOME}/.aws/config"
+AWSPROFILE="default"
+
+if [ ! -e $AWSSECUREFILE ];then
+	echo "ERR: aws config file $AWSSECUREFILE is not present"
+	exit 5
+fi
+
+#extract AWS credentials
+AWS_ACCESS_KEY_ID=$(cat $AWSSECUREFILE|grep -wA5 $AWSPROFILE|grep -w aws_access_key_id|awk -F"=" '{print $2}')
+AWS_SECRET_ACCESS_KEY=$(cat $AWSSECUREFILE|grep -wA5 $AWSPROFILE|grep -w aws_secret_access_key|awk -F"=" '{print $2}')
+
+#if AWS credentials are still not extracted
+if [ \( -z "$AWS_ACCESS_KEY_ID" \) -o \( -z "$AWS_SECRET_ACCESS_KEY" \) ] ;then
+	echo -e "\nERR: Please set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or setup your $AWSSECUREFILE under profile $AWSPROFILE\n"
+	exit 6
+fi
+
+fi
+
+#upload to s3
+if [ -f $FILE ];then
+	${AWSBIN} s3 cp $FILE s3://${AWS_BUCKET}/signed/
+else
+	echo -e "\nERR: The given file $FILE is not present\n"
+	exit 3
+fi
+
+FILENAME=$(echo $FILE|awk -F"/" '{print $NF}')
+URL=$(generateSignURL ${AWS_BUCKET}/signed/${FILENAME})
+echo -e "Generated URL is $URL"
+
+sendMail $URL

@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+###################################################################
+# Script to create snapshots for unencrypted volumes
+#
+# VN v1.0
+# 20200921
+#
+# Important Notes: 
+#   - Snapshot has to be in completed state, to create volumes
+###################################################################
+
+function Usage(){
+	echo "$0 ENV volume_filter"
+        echo "Example to create snapshot for UK mon-backup volume: $0 uk backup"
+}
+
+########
+# MAIN
+########
+
+if [ ! -z "$1" ]; then
+    ENV=$1
+fi
+
+if [ ! -z "$2" ]; then
+        volfilter=$2
+fi
+
+if [ \( -z "$ENV" \) -o \( -z "$volfilter" \) ] ;then
+        Usage
+        exit 2
+fi
+
+case "$ENV" in
+    anz|au)
+        PROFILE="default"
+        ;;
+    uk|UK)
+        PROFILE="UK"
+        ;;
+    us|US)
+        PROFILE="US"
+        ;;
+    *)
+        echo "ERR: $ENV not found"
+        exit 3
+        ;;
+esac
+
+OIFS=$IFS
+#IFS=""
+
+echo ""
+
+#validate if volume search string is unique
+volcount=$(aws ec2 describe-volumes --filters Name=status,Values=in-use,available Name=tag:Name,Values=*${volfilter}* Name=encrypted,Values=false --query 'Volumes[*].{VolumeID:VolumeId,Size:Size,Type:VolumeType,AvailabilityZone:AvailabilityZone,Encrypted:Encrypted,Name:Tags[?Key==`Name`]|[0].Value}|length(@)' --profile=${PROFILE} --output=text)
+
+#work only with unencrypted volumes
+voldetails=$(aws ec2 describe-volumes --filters Name=status,Values=in-use,available Name=tag:Name,Values=*${volfilter}* Name=encrypted,Values=false --query 'Volumes[*].{VolumeID:VolumeId,Size:Size,Type:VolumeType,AvailabilityZone:AvailabilityZone,Encrypted:Encrypted,Name:Tags[?Key==`Name`]|[0].Value}' --profile=${PROFILE} --output=text)
+
+if [ ${volcount} -ne 1 ] ; then
+	echo -e "\nERR: Zero or Multiple volumes (${volcount}) match the given filter ${volfilter}. Please use correct/specific search string for volume that is unencrypted. Bye!\n\n${voldetails}\n"
+	exit 6
+else
+	echo -e "INFO: Volume detected\n\n${voldetails}\n"
+fi
+
+volArray=($voldetails)
+
+#debug
+#for ((i=0; i<${#volArray[@]}; ++i)); do     echo "voldetails $i: ${volArray[$i]}"; done
+
+#extract volume details
+volRegion=${volArray[0]}
+volEncryption=${volArray[1]}
+volName=${volArray[2]}
+volSize=${volArray[3]}
+volType=${volArray[4]}
+volId=${volArray[5]}
+
+#only handle unencrypted volumes in this script
+#if [ "$volEncryption" == "True" ] ;then
+#	echo "WARN: The volume $volName is already encrypted. Nothing to do!"
+#	exit 3
+#fi
+
+IFS=$OIFS;
+
+#describe snapshot by age
+##aws ec2 describe-snapshots --owner-ids self --query "Snapshots[?(StartTime<=`2020-03-31`)].[SnapshotId]"
+
+#check if snapshot for given volume is already in pending state
+snapCheck=$(aws ec2 describe-snapshots --owner-ids self --filters Name=status,Values=pending Name=volume-id,Values=${volId} --query "Snapshots[*].{ID:SnapshotId,Time:StartTime}" --profile=${PROFILE} --output=text)
+
+if [ ! -z "$snapCheck" ]; then
+	echo "WARN: Snapshot is already in pending state for the volume ${volName}:${volId}. Aborting."
+	exit 5
+fi
+
+echo "Creating EBS Snapshot for the volume ${volName}:${volId}..."
+snapName="snap_${volName}"
+aws ec2 create-snapshot --volume-id ${volId} --description "Snapshot for volume ${volName}" --tag-specifications "ResourceType=snapshot,Tags=[{Key=Name,Value=${snapName}}]" --profile=${PROFILE}
+if [ $? == 0 ] ; then
+	echo "INFO: Snapshot successfully created"
+else
+	echo "ERR: Snapshot creation failed"
+fi

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash 
+
+bucketpath=$1
+profile="default"
+
+if [ ! -z $2 ];then
+   profile=$2
+fi
+
+
+[ -z $bucketpath ] && echo -e "\nbucketpath mandatory mate!\n\nExamples:\n\t$0 YOURBUCKETNAME\n\t$0 YOURBUCKETNAME/prefix1/2023" && exit 1
+echo "given bucket path is ${bucketpath}"
+
+aws s3 ls s3://${bucketpath} --recursive --profile=$profile | grep -v -E "(Bucket: |Prefix: |LastWriteTime|^$|--)" | awk 'BEGIN {total=0}{total+=$3}END{print total/1024/1024/1024" GB"}'

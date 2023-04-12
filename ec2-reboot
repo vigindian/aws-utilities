@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+
+############
+# FUNCTIONS
+############
+function usage(){
+	echo -e "USAGE:\n$0 REGION ENV NODE [Y] [check-retries] [check-delay]\n\nValid Options: $0 anz|us|uk stg|prd node \n\nExamples:\n\n Reboot queue and exit: $0 anz stg stg-webnode1\n Reboot and retries few times to check node is back online: $0 anz stg stg-webnode1 Y\n Reboot and check 5 times that are 10 seconds apart: $0 anz stg stg-webnode1 Y 5 10"
+	exit 1
+}
+
+############
+# MAIN
+############
+if [ "$#" -lt 3 ] || [ "$#" -gt 6 ] ;then
+	usage
+fi
+
+REGION="$1"
+ENV="$2"
+NODE="$3"
+
+#wait and check until server is back online
+if [ ! -z "$4" ] ;then
+	checkStatus="$4"
+
+	cretries=10
+	if [ ! -z "$5" ];then
+	cretries=$5
+	fi
+
+	cdelay=15
+	if [ ! -z "$6" ];then
+	cdelay=$6
+	fi
+fi
+
+today=$(date +%Y%m%d)
+
+if [ "$REGION" == "anz" ];then
+	case "$ENV" in
+		stg|staging)
+			AWSPROF="anzstg"
+			;;
+		prd|prod|production)
+			AWSPROF="anzprod"
+			;;
+		*)
+			echo "ERR: Unsupported env ${REGION}:${ENV}"
+			exit 21
+			;;
+	esac
+elif [ "$REGION" == "us" ];then
+	case "$ENV" in
+                prd|prod|production)
+			AWSPROF="usprod"
+                        ;;
+		*)
+                        echo "ERR: Unsupported env ${REGION}:${ENV}"
+                        exit 21
+                        ;;
+        esac
+elif [ "$REGION" == "uk" ];then
+	case "$ENV" in
+                prd|prod|production)
+			AWSPROF="ukprod"
+                        ;;
+		*)
+                        echo "ERR: Unsupported env ${REGION}:${ENV}"
+                        exit 21
+                        ;;
+        esac
+else
+	echo "ERR: Invalid region ${REGION}"
+	exit 11
+fi
+
+ec2instanceid=$(aws ec2 describe-instances --query 'Reservations[].Instances[].[InstanceId]' --filters Name=tag:Name,Values=${NODE} --output=text --profile=${AWSPROF})
+if [ -z ${ec2instanceid} ];then
+	echo "ERR: cannot determine instanceid for ${REGION}:${ENV}:${NODE}. Please verify the input and the name should be same as the 'Name' tag of the instance"
+	exit 43
+fi
+
+set -x ; aws ec2 reboot-instances --profile=${AWSPROF} --instance-ids ${ec2instanceid}
+if [ $? == 0 ] ; then
+	echo "INFO: Instance successfully rebooted"
+else
+	echo "ERR: Instance reboot failed"
+	exit 42
+fi
+
+RC=1
+#wait for reboot to complete
+if [ "$checkStatus" == "Y" ];then
+  ccount=1
+
+  #sleep before checking
+  sleep ${cdelay}
+
+  #check specific number of times if the node is back online
+  while [ "$ccount" -le "$cretries" ] 
+  do
+	ec2status=$(aws ec2 describe-instances --query 'Reservations[].Instances[].[State.Name]' --filters Name=tag:Name,Values=${NODE} --output=text --profile=${AWSPROF})
+	if [ "$ec2status" == "running" ];then
+		echo "Node ${NODE} is back online"
+		RC=0
+		break
+	fi
+	((ccount=ccount+1))
+	sleep ${cdelay}
+  done
+fi
+
+set +x
+
+exit ${RC}

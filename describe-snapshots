@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+
+profile="default"
+format="table"
+
+if [ ! -z $1 ];then
+   profile=$1
+fi
+
+if [ ! -z $2 ];then
+   format=$2
+fi
+
+#get all fields
+#aws ec2 describe-snapshots --owner-ids self  --profile=${profile} --output=${format}
+
+#get given fields
+##aws ec2 describe-snapshots --owner-ids self --query 'Snapshots[*].{ID:SnapshotId,StartTime:StartTime,Progress:Progress,VolumeID:VolumeId,VolumeSize:VolumeSize,Name:Tags[?Key==`Name`]|[0].Value}' --profile=${profile} --output=${format}
+
+#get given fields, and sort by snapshot-start-time in ascending order
+aws ec2 describe-snapshots --owner-ids self --query 'sort_by(Snapshots[*].{ID:SnapshotId,StartTime:StartTime,Progress:Progress,VolumeID:VolumeId,VolumeSize:VolumeSize,Name:Tags[?Key==`Name`]|[0].Value}, &StartTime)' --profile=${profile} --output=${format}

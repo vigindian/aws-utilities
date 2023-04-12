@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+#aws ec2 stop-instances --profile=stgrole --instance-ids i-0123abcde --force
+echo -e "EXAMPLE: \naws ec2 stop-instances --profile=anzstg --instance-ids i-0123abcde --force\n"

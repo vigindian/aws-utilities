@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+
+############
+# FUNCTIONS
+############
+function usage(){
+	echo -e "USAGE:\n$0 REGION NODE\n\nValid Options: $0 anz|us|uk node \n\nEg: $0 anz webnode1\n"
+	exit 1
+}
+
+############
+# MAIN
+############
+if [ "$#" -ne 2 ] ;then
+	usage
+fi
+
+REGION="$1"
+NODE="$2"
+
+today=$(date +%Y%m%d)
+
+if [ "$REGION" == "anz" ];then
+  AWSPROF="anz"
+elif [ "$REGION" == "us" ];then
+  AWSPROF="us"
+elif [ "$REGION" == "uk" ];then
+  AWSPROF="uk"
+else
+  echo "ERR: Invalid region ${REGION}"
+  exit 11
+fi
+
+volName="${NODE}-root"
+
+#identify root volume-id
+rootVolId=$(aws ec2 describe-instances --query 'Reservations[].Instances[].BlockDeviceMappings[?DeviceName==`/dev/sda1`].[Ebs.VolumeId]' --filters Name=tag:Name,Values=${NODE} --output=text --profile=${AWSPROF})
+
+if [ -z ${rootVolId} ];then
+	echo "ERR: root volume cannot be found for ${REGION}:${NODE}. Please verify the input and the name should be same as the 'Name' tag of the instance"
+	exit 43
+fi
+
+echo "Creating EBS Snapshot for the volume ${volName}:${rootVolId}..."
+snapName="snap_${volName}_${today}"
+set -x ; aws ec2 create-snapshot --volume-id ${rootVolId} --description "Snapshot for volume ${volName}" --tag-specifications "ResourceType=snapshot,Tags=[{Key=Name,Value=${snapName}}]" --profile=${AWSPROF}
+if [ $? == 0 ] ; then
+	echo "INFO: Snapshot successfully created"
+else
+	echo "ERR: Snapshot creation failed"
+	exit 42
+fi
+#set +x

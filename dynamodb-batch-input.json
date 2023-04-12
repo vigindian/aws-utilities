@@ -1,0 +1,34 @@
+{
+    "sampledyndbtable": [
+	 {
+            "PutRequest": {
+                "Item": {
+                    "Name": {"S": "SampleEntry1"},
+                    "AString": {"S": "SampleString1"},
+                    "ANumber": {"N": "1"},
+                    "AnotherNumber": {"N": "2"}
+                }
+            }
+         },
+	 {
+            "PutRequest": {
+                "Item": {
+                    "Name": {"S": "SampleEntry2"},
+                    "AString": {"S": "SampleString2"},
+                    "ANumber": {"N": "1"},
+                    "AnotherNumber": {"N": "4"}
+                }
+            }
+         },
+         {
+            "PutRequest": {
+                "Item": {
+                    "Name": {"S": "SampleEntry3"},
+                    "AString": {"S": "SampleString3"},
+                    "ANumber": {"N": "1"},
+                    "AnotherNumber": {"N": "8"}
+                }
+            }
+         }
+    ]
+}
