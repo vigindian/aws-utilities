@@ -1,0 +1,146 @@
+#!/bin/bash
+
+#############################################################
+# Setup a SSM-Connect Session so we can remote into the EC2
+#
+# Pre-requisites:
+# - aws-cli
+# - aws credentials for the corresponding profile
+# - SSM agent version 3.1.1374.0 or later on the ec2
+#############################################################
+
+##########
+
+#usage
+function usage()
+{
+  echo -e "Usage: $0 -p AWS_PROFILE -r AWS_REGION -i AWS_INSTANCEID\nExample: $0 -p default -r ap-southeast-1 -i i-1234abcde\n"
+  exit 1
+}
+
+#check if local port already in use
+function checkPort() {
+ cPort=$1
+ RC=0
+ netstat -an | grep tcp | grep -w ${cPort} > /dev/null
+ if [ $? -eq 0 ];then
+  #echo "port ${cPort} already in use!" #DEBUG
+  RC=1
+ fi
+ return ${RC}
+}
+
+##########
+
+#input processing
+while getopts ":r:p:i:h" o
+do
+  case "${o}" in
+    p)
+      AWSPROFILE=${OPTARG}
+      ;;
+    r)
+      AWSREGION=${OPTARG}
+      ;;
+    i)
+      INSTANCEID=${OPTARG}
+      ;;
+    h|*)
+      usage
+      ;;
+  esac
+done
+shift $((OPTIND-1))
+
+#instance-id is mandatory
+if [ -z "${INSTANCEID}" ];then
+    usage
+fi
+
+#default aws-profile and aws-region
+if [ -z "${AWSPROFILE}" ];then
+  AWSPROFILE="default"
+fi
+
+if [ -z "${AWSREGION}" ];then
+  AWSREGION="ap-southeast-1"
+fi
+
+LOCAL_PORT=55679 #any-local-port
+REMOTE_PORT=22 #ssh
+AWSPROF_CODE=$(echo ${AWSPROFILE} | cut -c1-7)
+
+echo "REMOTE_PORT for profile ${AWSPROF_CODE}: ${REMOTE_PORT}"
+
+#check if local port already in use
+until (checkPort ${LOCAL_PORT})
+do
+  if [ ${LOCAL_PORT} -gt 65533 ];then
+    echo "local port ${LOCAL_PORT} is nearing capacity limit. Aborting!"
+    exit 2
+  fi
+
+  echo "local port ${LOCAL_PORT} already in use. Let us try another"
+
+  ((LOCAL_PORT=LOCAL_PORT+1))
+done
+echo "LOCAL_PORT: ${LOCAL_PORT}"
+
+#pkill session-manager-plugin
+
+#do not start a new session if one is already active
+if (ps -ef | grep session-manager-plugin | grep ${INSTANCEID} | grep -v grep > /dev/null);then
+  echo "ssm session for ${INSTANCEID} already active"
+  exit 0
+else
+  echo "let us create a new session for ${INSTANCEID} using ${AWSPROFILE}:${AWSREGION}"
+fi
+
+osDetails=$(aws ssm describe-instance-information --query 'InstanceInformationList[*].[PlatformType,PlatformName]' --output text --region ${AWSREGION} --profile ${AWSPROFILE} --filters "Key=InstanceIds,Values=${INSTANCEID}")
+osExtractRC=$?
+if [ ${osExtractRC} -ne 0 ];then
+ echo "ERR: OS details cannot be retrieved using aws-ssm"
+ exit 2
+fi
+
+platformType=$(echo ${osDetails} | awk '{print $1}')
+platformName=$(echo ${osDetails} | awk '{print $2}')
+
+echo "${INSTANCEID} is ${platformType}, running ${platformName}"
+
+case ${platformName} in
+  "Ubuntu")
+    connectUser="ubuntu"
+  ;;
+  "Microsoft")
+    connectUser="administrator"
+  ;;
+  *)
+    connectUser="ec2-user"
+  ;;
+esac
+
+if [ "${platformType}" == "Windows" ];then
+  REMOTE_PORT=3389 #windows-remote-port
+fi
+
+#start session tunnel using ssm
+aws ssm start-session --target ${INSTANCEID} --document-name AWS-StartPortForwardingSession --parameters "localPortNumber=${LOCAL_PORT},portNumber=${REMOTE_PORT}" --region ${AWSREGION} --profile ${AWSPROFILE} > /dev/null &
+awsRC=$?
+if [ ${awsRC} -eq 0 ];then
+  echo "aws ssm connection started"
+  ##exit 0
+else
+  echo "ERR: aws ssm connection failed"
+  exit 31
+fi
+
+echo "Command to connect:"
+if [ "${platformType}" == "Linux" ];then
+
+  #reset local-host keys
+  ssh-keygen -R [localhost]:${LOCAL_PORT}
+
+  echo -e "ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p ${LOCAL_PORT} ${connectUser}@localhost"
+
+fi

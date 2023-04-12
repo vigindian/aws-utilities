@@ -1,0 +1,136 @@
+#!/bin/bash
+
+#############################################################
+# Setup a PortForwardingSession via SSM
+#
+# Pre-requisites:
+# - aws-cli
+# - aws credentials for the corresponding profile 
+# - SSM agent version 3.1.1374.0 or later on the ec2
+#
+# v1.0: 20220801: VN: Initial version
+#############################################################
+
+##########
+
+#usage
+function usage()
+{
+  echo -e "Usage: $0 -p AWS_PROFILE -r AWS_REGION -i AWS_INSTANCEID -l TUNNEL_LOCAL_PORT -u TUNNEL_REMOTE_URL -t TUNNEL_REMOTE_PORT\nExample: $0 -p AWSPROFILENAME -r eu-west-1 -i i-01hgavajaba -l 9090 -u remote-endpoint.example.com -t 443\n"
+  exit 1
+}
+
+#check if local port already in use
+function checkPort() {
+ cPort=$1
+ RC=0
+ netstat -an | grep tcp | grep -w ${cPort} > /dev/null
+ if [ $? -eq 0 ];then
+  #echo "port ${cPort} already in use!" #DEBUG
+  RC=1
+ fi
+ return ${RC}
+}
+
+##########
+
+#input processing
+while getopts ":r:p:i:h:u:l:t:" o
+do
+  case "${o}" in
+    p)
+      AWSPROFILE=${OPTARG}
+      ;;
+    r)
+      AWSREGION=${OPTARG}
+      ;;
+    i)
+      INSTANCEID=${OPTARG}
+      ;;
+    l)
+      TUNNEL_LOCAL_PORT=${OPTARG}
+      ;;
+    u)
+      TUNNEL_REMOTE_URL=${OPTARG}
+      ;;
+    t)
+      TUNNEL_REMOTE_PORT=${OPTARG}
+      ;;
+    h|*)
+      usage
+      ;;
+  esac
+done
+shift $((OPTIND-1))
+
+#instance-id is mandatory
+if [ -z "${INSTANCEID}" ];then
+    usage
+fi
+
+#default aws-profile and aws-region
+if [ -z "${AWSPROFILE}" ];then
+  AWSPROFILE="default"
+fi
+
+if [ -z "${AWSREGION}" ];then
+  AWSREGION="ap-southeast-1"
+fi
+
+[ -z "${TUNNEL_LOCAL_PORT}" ] && TUNNEL_LOCAL_PORT=9090
+[ -z "${TUNNEL_REMOTE_URL}" ] && TUNNEL_REMOTE_URL="remote-endpoint.example.com"
+[ -z "${TUNNEL_REMOTE_PORT}" ] && TUNNEL_REMOTE_PORT=443
+
+#do not start a new session if one is already active
+if (ps -ef | grep session-manager-plugin | grep ${INSTANCEID} | grep StartPortForwardingSessionToRemoteHost | grep -v grep > /dev/null);then
+  echo "ssm PortForwardingSession for ${INSTANCEID} is already active"
+  exit 0
+else
+  echo "let us create a new session for ${INSTANCEID} using ${AWSPROFILE}:${AWSREGION}"
+fi
+
+#pkill session-manager-plugin
+
+#check if local port already in use
+until (checkPort ${TUNNEL_LOCAL_PORT})
+do
+  if [ ${TUNNEL_LOCAL_PORT} -gt 65533 ];then
+    echo "Given local port ${TUNNEL_LOCAL_PORT} is nearing capacity limit. Aborting!"
+    exit 2
+  fi
+
+  echo "local port ${TUNNEL_LOCAL_PORT} already in use. Let us try another"
+
+  ((TUNNEL_LOCAL_PORT=TUNNEL_LOCAL_PORT+1))
+done
+echo "TUNNEL_LOCAL_PORT: ${TUNNEL_LOCAL_PORT}"
+
+#get os and platform info
+osDetails=$(aws ssm describe-instance-information --query 'InstanceInformationList[*].[PlatformType,PlatformName]' --output text --region ${AWSREGION} --profile ${AWSPROFILE} --filters "Key=InstanceIds,Values=${INSTANCEID}")
+osExtractRC=$?
+if [ ${osExtractRC} -ne 0 ];then
+ echo "OS details cannot be retrieved using aws-ssm"
+ exit 2
+fi
+
+platformType=$(echo ${osDetails} | awk '{print $1}')
+
+echo "${INSTANCEID} is ${platformType}"
+
+if [ "${platformType}" != "Linux" ];then
+  echo "Unsupported Platform Type for PortForwardingSession: ${platformType}"
+  exit 21
+fi
+
+echo "Let us initiate the PortForwardingSession via ssm..."
+
+#start session tunnel using ssm
+# aws ssm start-session --target i-1234abcde --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters '{"host":["mydb.example.us-east-2.rds.amazonaws.com"],"portNumber":["3306"], "localPortNumber":["3306"]}'
+aws ssm start-session --target ${INSTANCEID} --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters "{\"host\":[\"${TUNNEL_REMOTE_URL}\"],\"portNumber\":[\"${TUNNEL_REMOTE_PORT}\"], \"localPortNumber\":[\"${TUNNEL_LOCAL_PORT}\"]}" --region ${AWSREGION} --profile ${AWSPROFILE} 2>&1 > /dev/null &
+awsRC=$?
+if [ ${awsRC} -eq 0 ];then
+ echo "Tunnel started via aws ssm"
+else
+ echo "Tunnel setup via ssm connection failed"
+ exit 31
+fi

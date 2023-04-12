@@ -17,3 +17,7 @@
 - s3upload_signedurl: create pre-signed url and optionally send email with the pre-signed URL
 - vol_upsize: volume upsize based on given input
 - waflogs_process.py: Process WAF log(s) and convert to user-readable csv format for further investigation
+- secrets-get: retrieve secret details from secret-name
+- ssm-connect: setup an SSM connection, so as to remote into the ec2 even if ec2 is in a private-vpc network
+- ssm-portForwardingSession: setup a port-forwarding session using SSM
+- lambda-invoke-sample: sample command to invoke lambda using aws-cli

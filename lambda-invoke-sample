@@ -1,0 +1,3 @@
+#!/bin/bash
+
+aws lambda invoke --function-name yourFunctionName --cli-binary-format raw-in-base64-out --payload file:///Users/dev1/Desktop/workspaces/events/sample-input.json /tmp/yourFunctionNameOut.json --output=json --profile=default --region=eu-west-1
