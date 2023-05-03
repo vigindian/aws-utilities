@@ -4,7 +4,7 @@
 # FUNCTIONS
 ############
 function usage(){
-	echo -e "USAGE:\n$0 REGION ENV ROLE NODE MODE\n\nValid Options: $0 anz|us|uk|mx stg|prd web node O|N\n\nEg: $0 anz stg web stg-web3 O\n"
+	echo -e "USAGE:\n$0 REGION ENV ROLE NODE MODE\n\nValid Options: $0 anz|us|uk stg|prd web node O|N\n\nEg: $0 anz stg web web3 O\n"
 	exit 1
 }
 

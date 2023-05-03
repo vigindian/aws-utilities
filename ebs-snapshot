@@ -11,7 +11,7 @@
 
 function Usage(){
 	echo "$0 ENV volume_filter"
-        echo "Example to create snapshot for UK mon-backup volume: $0 uk backup"
+        echo "Example to create snapshot for UK backup volume: $0 uk backup"
 }
 
 ########
