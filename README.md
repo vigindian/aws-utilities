@@ -1,23 +1,23 @@
 # AWS Utilities
-- describe-instance-details: describe ec2 instance details
-- describe-snapshots: describe snapshot details
-- describe-volumes: describe volume details
-- dynamodb_query.sh: query dynamodb based on input search_attributes.json
-- dynamodb_update.sh: bulk-update dynamodb table based on input-file dynamodb-batch-input.json
-- ebs-fast-snapshot: enable FSR for existing snapshot
-- ebs-snapshot: create snapshot
-- ebs-snapshot-unencrypted: create snapshot for unencrypted volume
-- ec2-forcestop-sample: ec2 forcestop sample command
-- ec2-reboot: reboot ec2 based on given ec2 parameters
-- ec2-root-snapshot: create snapshot for given ec2 root volume, based on specific volume naming convention
-- elb_maintenance.sh: add/remove ec2 from ALB per given input
-- iam_get-credential-report: get IAM credential report
-- restore_glacier.sh: restore s3 glacier objects
-- s3size: identify s3 bucket/prefix/object size
-- s3upload_signedurl: create pre-signed url and optionally send email with the pre-signed URL
-- vol_upsize: volume upsize based on given input
-- waflogs_process.py: Process WAF log(s) and convert to user-readable csv format for further investigation
-- secrets-get: retrieve secret details from secret-name
-- ssm-connect: setup an SSM connection, so as to remote into the ec2 even if ec2 is in a private-vpc network
-- ssm-portForwardingSession: setup a port-forwarding session using SSM
-- lambda-invoke-sample: sample command to invoke lambda using aws-cli
+- [describe-instance-details](./describe-instance-details): describe ec2 instance details
+- [describe-snapshots](./describe-snapshots): describe snapshot details
+- [describe-volumes](./describe-volumes): describe volume details
+- [dynamodb_query.sh](./dynamodb_query.sh): query dynamodb based on input search_attributes.json
+- [dynamodb_update.sh](./dynamodb_update.sh): bulk-update dynamodb table based on input-file dynamodb-batch-input.json
+- [ebs-fast-snapshot](./ebs-fast-snapshot): enable FSR for existing snapshot
+- [ebs-snapshot](./ebs-snapshot): create snapshot
+- [ebs-snapshot-unencrypted](./ebs-snapshot-unencrypted): create snapshot for unencrypted volume
+- [ec2-forcestop-sample](./ec2-forcestop-sample): ec2 forcestop sample command
+- [ec2-reboot](./ec2-reboot): reboot ec2 based on given ec2 parameters
+- [ec2-root-snapshot](./ec2-root-snapshot): create snapshot for given ec2 root volume, based on specific volume naming convention
+- [elb_maintenance.sh](./elb_maintenance.sh): add/remove ec2 from ALB per given input
+- [iam_get-credential-report](./iam_get-credential-report): get IAM credential report
+- [restore_glacier.sh](./restore_glacier.sh): restore s3 glacier objects
+- [s3size](./s3size): identify s3 bucket/prefix/object size
+- [s3upload_signedurl](./s3upload_signedurl): create pre-signed url and optionally send email with the pre-signed URL
+- [vol_upsize](./vol_upsize): volume upsize based on given input
+- [waflogs_process.py](./waflogs_process.py): Process WAF log(./s) and convert to user-readable csv format for further investigation
+- [secrets-get](./secrets-get): retrieve secret details from secret-name
+- [ssm-connect](./ssm-connect): setup an SSM connection, so as to remote into the ec2 even if ec2 is in a private-vpc network
+- [ssm-portForwardingSession](./ssm-portForwardingSession): setup a port-forwarding session using SSM
+- [lambda-invoke-sample](./lambda-invoke-sample): sample command to invoke lambda using aws-cli
